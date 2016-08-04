@@ -68,5 +68,3 @@ The “edge function lower bound” thing I described for coarse rast works fine
 Finally the blocks used during rasterization are often snapped on a grid (why that would help will become clearer in the next part). If that’s the case, even a triangle that just covers 2 pixels might straddle 2 tiles and make you rasterize two 8×8 blocks. More inefficiency.
 
 The point is this: Yes, all this is fairly simple and elegant, but it’s not perfect, and actual rasterization for actual triangles is nowhere near theoretical peak rasterization rates (which always assume that all of the fine blocks are completely filled). Keep that in mind.
-
-
