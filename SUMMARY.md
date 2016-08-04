@@ -11,7 +11,7 @@
 * [Pixel Processing - Fork Phase](chapter8-pixel-processing-fork.md)
 * [Pixel Processing - Join Phase](chapter9-pixel-processing-join.md)
 * [Geometry Shaders](chapter10-geometry-shaders.md)
-* Stream-Out
+* [Stream-Out](chapter11-stream-out.md)
 * Tessellation
 * Compute Shaders
 
