@@ -12,6 +12,6 @@
 * [Pixel Processing - Join Phase](chapter9-pixel-processing-join.md)
 * [Geometry Shaders](chapter10-geometry-shaders.md)
 * [Stream-Out](chapter11-stream-out.md)
-* Tessellation
+* [Tessellation](chapter12-tessellation.md)
 * Compute Shaders
 
