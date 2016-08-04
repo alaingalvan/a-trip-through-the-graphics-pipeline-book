@@ -7,4 +7,5 @@
 * [Texture Samplers](chapter4-texture-samplers.md)
 * Primitive Assembly, Clip/Cull, Projection, and Viewport Transform
 * (Triangle) Rasterization and Setup
+* Z/Stencil Processing, 3 Different Ways
 
