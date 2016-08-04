@@ -11,4 +11,5 @@
 * Pixel Processing – Fork Phase
 * Pixel Processing - Join Phase
 * Geometry Shaders
+* Stream-Out
 
