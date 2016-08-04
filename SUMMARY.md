@@ -9,7 +9,7 @@
 * [(Triangle) Rasterization and Setup](chapter6-triangle-rasterization.md)
 * [Z/Stencil Processing, 3 Different Ways](chapter7-zstencil-processing.md)
 * [Pixel Processing - Fork Phase](chapter8-pixel-processing.md)
-* Pixel Processing - Join Phase
+* [Pixel Processing - Join Phase](chapter9-pixel-processing-join.md)
 * Geometry Shaders
 * Stream-Out
 * Tessellation
