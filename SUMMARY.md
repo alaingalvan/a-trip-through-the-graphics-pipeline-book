@@ -10,7 +10,7 @@
 * [Z/Stencil Processing, 3 Different Ways](chapter7-zstencil-processing.md)
 * [Pixel Processing - Fork Phase](chapter8-pixel-processing-fork.md)
 * [Pixel Processing - Join Phase](chapter9-pixel-processing-join.md)
-* Geometry Shaders
+* [Geometry Shaders](chapter10-geometry-shaders.md)
 * Stream-Out
 * Tessellation
 * Compute Shaders
