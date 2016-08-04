@@ -6,4 +6,5 @@
 * [3D Pipeline Overview / Vertex Processing](chapter3-pipeline-overview.md)
 * [Texture Samplers](chapter4-texture-samplers.md)
 * Primitive Assembly, Clip/Cull, Projection, and Viewport Transform
+* (Triangle) Rasterization and Setup
 
