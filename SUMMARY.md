@@ -8,7 +8,7 @@
 * Primitive Assembly, Clip/Cull, Projection, and Viewport Transform
 * (Triangle) Rasterization and Setup
 * Z/Stencil Processing, 3 Different Ways
-* Pixel Processing – Fork Phase
+* Pixel Processing - Fork Phase
 * Pixel Processing - Join Phase
 * Geometry Shaders
 * Stream-Out
