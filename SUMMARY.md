@@ -12,4 +12,5 @@
 * Pixel Processing - Join Phase
 * Geometry Shaders
 * Stream-Out
+* Tessellation
 
