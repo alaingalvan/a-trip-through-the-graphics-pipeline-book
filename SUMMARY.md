@@ -6,7 +6,7 @@
 * [3D Pipeline Overview / Vertex Processing](chapter3-pipeline-overview.md)
 * [Texture Samplers](chapter4-texture-samplers.md)
 * [Primitive Assembly, Clip/Cull, Projection, and Viewport Transform](chapter5-primitive-assembly.md)
-* (Triangle) Rasterization and Setup
+* [(Triangle) Rasterization and Setup](chapter6-triangle-rasterization.md)
 * Z/Stencil Processing, 3 Different Ways
 * Pixel Processing - Fork Phase
 * Pixel Processing - Join Phase
