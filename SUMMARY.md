@@ -5,7 +5,7 @@
 * [GPU Memory Architecture and the Command Processor](chapter2-gpu-architecture.md)
 * [3D Pipeline Overview / Vertex Processing](chapter3-pipeline-overview.md)
 * [Texture Samplers](chapter4-texture-samplers.md)
-* Primitive Assembly, Clip/Cull, Projection, and Viewport Transform
+* [Primitive Assembly, Clip/Cull, Projection, and Viewport Transform](chapter5-primitive-assembly.md)
 * (Triangle) Rasterization and Setup
 * Z/Stencil Processing, 3 Different Ways
 * Pixel Processing - Fork Phase
