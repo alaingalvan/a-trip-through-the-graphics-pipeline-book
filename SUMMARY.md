@@ -13,4 +13,5 @@
 * Geometry Shaders
 * Stream-Out
 * Tessellation
+* Compute Shaders
 
