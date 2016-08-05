@@ -2,7 +2,7 @@
 
 > The following is a clone of Fabian Giesen's amazing series on the graphics pipeline, cloned under his public domain license. I've modified it slightly to point out important terms and take advantage of all of github flavored markdown. 
 
-This a series of blog posts I've written about the D3D/OpenGL graphics pipelines as actually implemented by GPUs. A lot of this is well known among graphics programmers, and there's tons of papers on various bits and pieces of it, but one bit I've been annoyed with is that while there's both broad overviews and very detailed information on individual components, there's not much in between, and what little there is is mostly out of date.
+This is a series of blog posts I've written about the D3D/OpenGL graphics pipelines as actually implemented by GPUs. A lot of this is well known among graphics programmers, and there's tons of papers on various bits and pieces of it, but one bit I've been annoyed with is that while there's both broad overviews and very detailed information on individual components, there's not much in between, and what little there is is mostly out of date.
 
 This series is intended for graphics programmers that know a modern 3D API (at least OpenGL 2.0+ or D3D9+) well and want to know how it all looks under the hood. It's not a description of the graphics pipeline for novices; if you haven't used a 3D API, most if not all of this will be completely useless to you. 
 
