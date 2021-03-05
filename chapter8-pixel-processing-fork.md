@@ -65,7 +65,7 @@ Another pixel shader specific is the `discard` instruction. A pixel shader can d
 
 Pixel shaders can also write the output depth (this feature has been around for quite some time now). In my experience, this is an excellent way to shoot down early-Z, hierarchical Z and Z compression and in general get the slowest path possible. By now, you know enough about how these things work to see why. 😄
 
-Pixel shaders produce several outputs – in general, one 4-component vector for each render target, of which there can be (currently) up to 8\. The shader then sends the results on down the pipeline towards what D3D calls the "Output Merger". This’ll be our topic next time.
+Pixel shaders produce several outputs – in general, one 4-component vector for each render target, of which there can be (currently) up to 8. The shader then sends the results on down the pipeline towards what D3D calls the "Output Merger". This’ll be our topic next time.
 
 But before I sign off, there’s one final thing that pixel shaders can do starting with D3D11: they can write to Unordered Access Views (UAVs) – something which only compute and pixel shaders can do. Generally speaking, UAVs take the place of render targets during compute shader execution; but unlike render targets, the shader can determine the position to write to itself, and there’s no implicit API order guarantee (hence the "unordered access" part of the name). For now, I’ll only mention that this functionality exists – I’ll talk more about it when I get to Compute Shaders.
 

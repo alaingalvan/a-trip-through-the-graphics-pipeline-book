@@ -63,7 +63,7 @@ So we’re down to one of the regular clip planes: $$0 < w$$. Can we get rid of 
 
 ### Projection and viewport transform
 
-Projection just takes the x, y and z coordinates and divides them by w (unless you’re using a homogeneous rasterizer which doesn’t actually project – but I’ll ignore that possibility in the following). This gives us normalized device coordinates, or NDCs, between -1 and 1\. We then apply the viewport transform which maps the projected x and y to pixel coordinates (which I’ll call X and Y) and the projected z into the range [0,1] (I’ll call this value Z), such that at the z-near plane Z=0 and at the z-far plane Z=1.
+Projection just takes the x, y and z coordinates and divides them by w (unless you’re using a homogeneous rasterizer which doesn’t actually project – but I’ll ignore that possibility in the following). This gives us normalized device coordinates, or NDCs, between -1 and 1. We then apply the viewport transform which maps the projected x and y to pixel coordinates (which I’ll call X and Y) and the projected z into the range [0,1] (I’ll call this value Z), such that at the z-near plane Z=0 and at the z-far plane Z=1.
 
 At this point, we also snap pixels to fractional coordinates on the sub-pixel grid. As of D3D11, hardware is required to have exactly 8 bits of subpixel precision for triangle coordinates. This snapping turns some _very_ thin slivers (which would otherwise cause problems) into degenerate triangles (which don’t need to be rendered at all).
 

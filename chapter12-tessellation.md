@@ -12,16 +12,21 @@ Tessellation as implemented by Shader 5.x class HW is of the "patch-based" varie
 
 Tessellated primitives can be drawn naturally in their respective domain coordinate systems. For quads, the obvious choice of drawing the domain is as a unit square, so that’s what I’ll use; for triangles, I’ll use an equilateral triangle to visualize things. Here’s the coordinate systems I’ll be using in this post with both the vertices and edges labeled:
 
-[![Quad coordinate system](https://fgiesen.files.wordpress.com/2011/09/quad_coords2.png?w=497 "Quad coordinate system")](https://fgiesen.files.wordpress.com/2011/09/quad_coords2.png)
-[![Triangle coordinate system](https://fgiesen.files.wordpress.com/2011/09/tri_coords.png?w=497 "Triangle coordinate system")](https://fgiesen.files.wordpress.com/2011/09/tri_coords.png)
+![Quad coordinate system](https://fgiesen.files.wordpress.com/2011/09/quad_coords2.png)
+
+![Triangle coordinate system](https://fgiesen.files.wordpress.com/2011/09/tri_coords.png)
 
 Anyway, both triangles and quads have what I would consider a "natural" way to tessellate them, depicted below. But it turns out that’s not actually the mesh topology you get.
 
-[!["Natural" tessellated quad (4x3)](https://fgiesen.files.wordpress.com/2011/09/quad_tess_simple1.png?w=497 ""Natural" tessellated quad (4x3)")](https://fgiesen.files.wordpress.com/2011/09/quad_tess_simple1.png) [!["Natural" tessellated tri (3)](https://fgiesen.files.wordpress.com/2011/09/tri_tess_simple1.png?w=497 ""Natural" tessellated tri (3)")](https://fgiesen.files.wordpress.com/2011/09/tri_tess_simple1.png)
+!["Natural" tessellated quad (4x3)](https://fgiesen.files.wordpress.com/2011/09/quad_tess_simple1.png)
+
+!["Natural" tessellated tri (3)](https://fgiesen.files.wordpress.com/2011/09/tri_tess_simple1.png)
 
 Here’s the _actual_ meshes that the tessellator will produce for the given input parameters:
 
-[![Actual tessellated quad (4x3)](https://fgiesen.files.wordpress.com/2011/09/quad_tess4x3.png?w=497 "Actual tessellated quad (4x3)")](https://fgiesen.files.wordpress.com/2011/09/quad_tess4x3.png) [![Actual tessellated tri (edges=inside=3)](https://fgiesen.files.wordpress.com/2011/09/tri_tess3.png?w=497 "Actual tessellated tri (edges=inside=3)")](https://fgiesen.files.wordpress.com/2011/09/tri_tess3.png)
+![Actual tessellated quad (4x3)](https://fgiesen.files.wordpress.com/2011/09/quad_tess4x3.png)
+
+![Actual tessellated tri (edges=inside=3)](https://fgiesen.files.wordpress.com/2011/09/tri_tess3.png)
 
 For quads, this is (roughly) what we’re expecting – except for some flipped diagonals, which I’ll get to in a minute. But the triangle is a completely different beast. It’s got a very different topology from the "natural" tessellation I showed above, including a different number of vertices (12 instead of 10). Clearly, there’s something funny going on here – and that something happens to be related to the way transitions between different tessellation levels are handled.
 
@@ -33,13 +38,13 @@ The solution – which you’ve already encountered if you’ve written a Hull o
 
 So, here are some new reference patches – this time with different TFs along each edge so we can see how that works:
 
-[![Asymmetrically tessellated quad](https://fgiesen.files.wordpress.com/2011/09/quad_tess_asym.png?w=497 "Asymmetrically tessellated quad")](https://fgiesen.files.wordpress.com/2011/09/quad_tess_asym.png) [![Asymmetrically tessellated triangle](https://fgiesen.files.wordpress.com/2011/09/tri_tess_asym.png?w=497 "Asymmetrically tessellated triangle")](https://fgiesen.files.wordpress.com/2011/09/tri_tess_asym.png)
+[![Asymmetrically tessellated quad](https://fgiesen.files.wordpress.com/2011/09/quad_tess_asym.png "Asymmetrically tessellated quad")](https://fgiesen.files.wordpress.com/2011/09/quad_tess_asym.png) [![Asymmetrically tessellated triangle](https://fgiesen.files.wordpress.com/2011/09/tri_tess_asym.png "Asymmetrically tessellated triangle")](https://fgiesen.files.wordpress.com/2011/09/tri_tess_asym.png)
 
 I’ve colored the areas influenced by the different edge tessellation factors; the uncolored center part in the middle only depends on the inside TFs. In these images, the u=0 (yellow) edge has a TF of 2, the v=0 (green) edge has a TF of 3, the u=1 / w=0 (pink) edge has a TF of 4, and the v=1 (quad only, cyan) edge has a TF of 5 – exactly the number of vertices along the corresponding outer edge. As should be obvious from these two images, the basic building block for topology is just a nice way to stitch two subdivided edges with different number of vertices to each other. The details of this are somewhat tricky, but not particularly interesting, so I won’t go into it.
 
 As for the inside TFs, quads are fairly easy: The quad above has an inside TF of 3 along u and 4 along v. The geometry is basically that of a regular grid of that size, except with the first and last rows/columns replaced by the respective stitching triangles (if any edge has a TF of 1, the resulting mesh will have the same structure as if the inside TFs for u/v were both 2, even if they’re smaller than that). Triangles are a bit more complicated. Odd TFs we’ve already seen – for a TF of $$N$$, they produce a mesh consisting of $$\frac{N+1}{2}$$ concentric rings, the innermost of which is a single triangle. For even TFs, we get $$\frac{N}{2}$$ concentric rings with a center vertex instead of a center triangle. Below is an image of the simplest even case, $$N=2$$, which consists just of edge stitches plus the center vertex.
 
-[![Triangle with asymmetric tessellation, even inner TF](https://fgiesen.files.wordpress.com/2011/09/tri_tess_asym_even.png?w=497 "Triangle with asymmetric tessellation, even inner TF")](https://fgiesen.files.wordpress.com/2011/09/tri_tess_asym_even.png)
+[![Triangle with asymmetric tessellation, even inner TF](https://fgiesen.files.wordpress.com/2011/09/tri_tess_asym_even.png "Triangle with asymmetric tessellation, even inner TF")](https://fgiesen.files.wordpress.com/2011/09/tri_tess_asym_even.png)
 
 Finally, when triangulating quads, the diagonal is generally chosen to point away from the center of the patch (in the domain coordinate space), with a consistent tie-breaking rule. This is simply to ensure maximum rotational symmetry of the resulting meshes – if there’s extra degrees of freedom, might as well use them!
 
@@ -47,7 +52,7 @@ Finally, when triangulating quads, the diagonal is generally chosen to point awa
 
 So far, I’ve only talked about integer TFs. In two of the so-called "partitioning types", namely "Integer" and "Pow2", that’s all the Tessellator sees. If the shader generates a non-integer (or, respectively, non-power-of-2) TF, it will simply get rounded up to the next acceptable value. More interesting are the remaining two partitioning types: Fractional-odd and Fractional-even tessellation. Instead of jumping from tessellation factor to tessellation factor (which would cause visible pops), new vertices start out at the same position as an existing vertex in the mesh and then gradually move to their new positions as the TF increases.
 
-For example, with fractional-odd tessellation, if you were to use an inner TF of 3.001 for the above triangle, the resulting mesh would look very much like the mesh for a TF of 3 – but topologically, it’d be the same as if the TF was 5, i.e. it’s a patch with 3 concentric rings, even though the middle ring is very narrow. Then as the TF gets closer to 5, the middle ring expands until it is eventually at its final position for TF 5\. Once you raise the TF past 5, the mesh will be topologically the same as is the TF was 7, but again with a number of almost-degenerate triangles in the middle, and so forth. Fractional-even tessellation uses the same principle, just with even TFs.
+For example, with fractional-odd tessellation, if you were to use an inner TF of 3.001 for the above triangle, the resulting mesh would look very much like the mesh for a TF of 3 – but topologically, it’d be the same as if the TF was 5, i.e. it’s a patch with 3 concentric rings, even though the middle ring is very narrow. Then as the TF gets closer to 5, the middle ring expands until it is eventually at its final position for TF 5. Once you raise the TF past 5, the mesh will be topologically the same as is the TF was 7, but again with a number of almost-degenerate triangles in the middle, and so forth. Fractional-even tessellation uses the same principle, just with even TFs.
 
 The output of the tessellator then consists of two things: First, the positions of the tessellated vertices in domain coordinates, and second, the corresponding connectivity information – basically an index buffer.
 
