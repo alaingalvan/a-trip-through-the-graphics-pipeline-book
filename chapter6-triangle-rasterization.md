@@ -2,7 +2,7 @@
 
 Welcome back. This time we’re actually gonna see triangles being rasterized – finally! But before we can rasterize triangles, we need to do triangle setup, and before I can discuss triangle setup, I need to explain what we’re setting things up _for_; in other words, let’s talk hardware-friendly triangle rasterization algorithms.
 
-### How _not_ to render a triangle
+## How _not_ to Render a Triangle
 
 First, a little heads-up to people who’ve been at this game long enough to have written their own optimized software texture mappers: First, you’re probably used to thinking of triangle rasterizers as this amalgamated blob that does a bunch of things at once: trace the triangle shape, interpolate u and v coordinates (or, for perspective correct mapping, `u/z`, `v/z` and `1/z`), do the Z-buffer test (and for perspective correct mapping, you probably used a 1/z buffer instead), and then do the actual texturing (plus shading), all in one big loop that’s meticulously scheduled and probably uses all available registers. You know the kind of thing I’m talking about, right? Yeah, forget about that here. This is hardware. In hardware, you package things up into nice tidy little modules that are easy to design and test in isolation. In hardware, the “triangle rasterizer” is a block that tells you what (sub-)pixels a triangle covers; in some cases, it’ll also give you barycentric coordinates of those pixels inside the triangle. But that’s it. No u’s or v’s – not even 1/z’s. And certainly no texturing and shading, through with the dedicated texture and shader units that should hardly come as a surprise.
 
@@ -10,7 +10,7 @@ Second, if you’ve written your own triangle mappers “back in the day”, you
 
 So, what’s bad about that algorithm for hardware? First, it really rasterizes triangles scan-line by scan-line. For reasons that will become obvious once I get to Pixel Shading, we want our rasterizer to output in groups of 2×2 pixels (so-called “quads” – not to be confused with the “quad” primitive that’s been decomposed into a pair of triangles at this stage in the pipeline). This is all kinds of awkward with the scan-line algorithm because not only do we now need to run two “instances” of it in parallel, they also each start at the first pixel covered by the triangle in their respective scan lines, which may be pretty far apart and doesn’t nicely lead to generating the 2×2 quads we’d like to get. It’s also hard to parallelize efficiently, not symmetrical in the x and y directions – which means a triangle that’s 8 pixels wide and 100 pixels stresses very different parts of the rasterizer than a triangle that’s 100 pixels wide and 8 pixels high. Really annoying because now you have to make the “x” and “y” stepping “loops” equally fast in order to avoid bottlenecks – but we do all our work on the “y” steps, the loop in “x” is trivial! As said, it’s a mess.
 
-### A better way
+## A Better Way
 
 A much simpler (and more hardware-friendly) way to rasterize triangles was presented in a 1988 [paper](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.157.4621&rep=rep1&type=pdf) by Pineda. The general approach can be summarized in 2 sentences: the signed distance to a line can be computed with a 2D dot product (plus an add) – just as a signed distance to a plane can be compute with a 3D dot product (plus add). And the interior of a triangle can be defined as the set of all points that are on the correct side of all three edges. So… just loop over all candidate pixels and test whether they’re actually inside the triangle. That’s it. That’s the basic algorithm.
 
@@ -20,7 +20,7 @@ By the way, there’s another thorny bit here, which is fill rules; you need to 
 
 We have a problem though: How do we find out which 8×8 blocks of pixels to test against? Pineda mentions two strategies: 1) just scanning over the whole bounding box of the triangle, or 2) a smarter scheme that stops to “turn around” once it notices that it didn’t hit any triangle samples anymore. Well, that’s just fine if you’re testing one pixel at a time. But we’re doing 8×8 pixels now! Doing 64 parallel adds only to find out at the very end that exactly none of them hit any pixels whatsoever is a _lot_ of wasted work. So… don’t do that!
 
-### What we need around here is more hierarchy
+## What we Need Around Here is More Hierarchy
 
 What I’ve just described is what the “fine” rasterizer does (the one that actually outputs sample coverage). Now, to avoid wasted work at the pixel level, what we do is add another rasterizer in front of it that doesn’t rasterize the triangle into pixels, but “tiles” – our 8×8 blocks ([This](http://people.csail.mit.edu/ericchan/bib/pdf/p15-mccormack.pdf) paper by McCormack and McNamara has some details, as does Greene’s [“Hierarchical Polygon Tiling with Coverage Masks”](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.115.1646&rep=rep1&type=pdf) that takes the idea to its logical conclusion). Rasterizing edge equations into covered tiles works very similarly to rasterizing pixels; what we do is compute lower and upper bounds for the edge equations over full tiles; since the edge equations are linear, such extrema occur on the boundary of the tile – in fact, it’s enough to loop at the 4 corner points, and from the signs of the ‘a’ and ‘b’ terms in the edge equation, we can determine which corner. Bottom line, it’s really not much more expensive than what we already discussed, and needs exactly the same machinery – a few parallel integer adders. As a bonus, if we evaluate the edge equations at one corner of the tile anyway, we might as well just pass that through to the fine rasterizer: it needs one reference value per 8×8 block, remember? Very nice.
 
@@ -32,20 +32,20 @@ In fact, the actual problem here isn’t big triangles in the first place; they 
 
 One thing to note is that with this kind of algorithm, slivers (long, very thin triangles) are seriously bad news – you need to traverse tons of tiles and only get very few covered pixels for each of them. So, well, they’re slow. Avoid them when you can.
 
-### So what does triangle setup do?
+## So What Does Triangle Setup Do?
 
 Well, now that I’ve described what the rasterization algorithm is, we just need to look what per-edge constants we used throughout; that’s exactly what we need to set up during triangle setup.
 
 In our case, the list is this:
 
-*   The edge equations – a, b, c for all 3 triangle edges.
-*   Some of the derived values, like the $$ia + jb$$ for $$0 \le i, j \le 7$$ that I mentioned; note that you wouldn’t actually store a full 8×8 matrix of these in hardware, certainly not if you’re gonna add another value to it anyway. The best way to do this is in HW probably to just compute the $$ia$$ and $$jb$$, use a [Carry-save adder](http://en.wikipedia.org/wiki/Carry-save_adder) (aka 3:2 reducer, I wrote about them [before](https://fgiesen.wordpress.com/2010/08/23/carry-save-adders-and-averaging-bit-packed-values/)) to reduce the $$ia + jb + c$$ expression to a single sum, and then finish that off with a regular adder. Or something similar, anyway.
-*   Which reference corner of the tiles to use to get the upper/lower bounds of the edge equations for coarse rasterizer.
-*   The initial value of the edge equations at the first reference point for the coarse rasterizer (adjusted for fill rule).
+- The edge equations – a, b, c for all 3 triangle edges.
+- Some of the derived values, like the $$ia + jb$$ for $$0 \le i, j \le 7$$ that I mentioned; note that you wouldn’t actually store a full 8×8 matrix of these in hardware, certainly not if you’re gonna add another value to it anyway. The best way to do this is in HW probably to just compute the $$ia$$ and $$jb$$, use a [Carry-save adder](http://en.wikipedia.org/wiki/Carry-save_adder) (aka 3:2 reducer, I wrote about them [before](https://fgiesen.wordpress.com/2010/08/23/carry-save-adders-and-averaging-bit-packed-values/)) to reduce the $$ia + jb + c$$ expression to a single sum, and then finish that off with a regular adder. Or something similar, anyway.
+- Which reference corner of the tiles to use to get the upper/lower bounds of the edge equations for coarse rasterizer.
+- The initial value of the edge equations at the first reference point for the coarse rasterizer (adjusted for fill rule).
 
 …so that’s what triangle setup computes. It boils down to several large integer multiplies for the edge equations and their initial values, a few smaller multiplies for the step values, and some cheap combinatorial logic for the rest.
 
-### Other rasterization issues and pixel output
+## Other Rasterization Issues and Pixel Output
 
 One thing I didn’t mention so far is the scissor rect. That’s just a screen-aligned rectangle that masks pixels; no pixel outside that rect will be generated by the rasterizer. This is fairly easy to implement – the coarse rasterizer can just reject tiles that don’t overlap the scissor rect outright, and the fine rasterizer ANDs all generated coverage masks with the “rasterized” scissor rectangle (where “rasterization” here boils down to a one integer compare per row and column and some bitwise ANDs). Simple stuff, moving on.
 
@@ -55,7 +55,7 @@ For, say 4x MSAA, you can do two things in an 8×8 rasterizer: you can treat eac
 
 Anyway, we now have a fine rasterizer that gives us locations of 8×8 blocks plus a coverage mask in each block. Great, but it’s just half of the story – current hardware also does early Z and hierarchical Z testing (if possible) before running pixel shaders, and the Z processing is interwoven with actual rasterization. But for didactic reasons it seemed better to split this up; so in the next part, I’ll be talking about the various types of Z processing, Z compression, and some more triangle setup – so far we’ve just covered setup for rasterization, but there’s also various interpolated quantities we want for Z and pixel shading, and they need to be set up too! Until then.
 
-### Caveats
+## Caveats
 
 I’ve linked to a few rasterization algorithms that I think are representative of various approaches (they also happen to be all on the Web). There’s a lot more. I didn’t even try to give you a comprehensive introduction into the subject here; that would be a (lengthy!) serious of posts on its own – and rather dull after a fashion, I fear.
 

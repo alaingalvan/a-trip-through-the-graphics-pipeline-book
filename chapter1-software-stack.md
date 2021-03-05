@@ -3,13 +3,16 @@
 It’s been awhile since I posted something here, and I figured I might use this spot to explain some general points about graphics hardware and software as of 2011; you can find functional descriptions of what the graphics stack in your PC does, but usually not the "how" or "why"; I’ll try to fill in the blanks without getting too specific about any particular piece of hardware. I’m going to be mostly talking about DX11-class hardware running D3D9/10/11 on Windows, because that happens to be the (PC) stack I’m most familiar with – not that the API details etc. will matter much past this first part; once we’re actually on the GPU it’s all native commands.
 
 ## The application
+
 This is your code. These are also your bugs. Really. Yes, the API runtime and the driver have bugs, but this is not one of them. Now go fix it already.
 
 ## The API runtime
+
 You make your resource creation / state setting / draw calls to the API. The API runtime keeps track of the current state your app has set, validates parameters and does other error and consistency checking, manages user-visible resources, may or may not validate shader code and shader linkage (or at least D3D does, in OpenGL this is handled at the driver level) maybe batches work some more, and then hands it all over to the graphics driver – more precisely, the user-mode driver.
 
 ## The user-mode graphics driver (or UMD)
-This is where most of the "magic" on the CPU side happens. If your app crashes because of some API call you did, it will usually be in here :). It’s called `nvd3dum.dll` (NVidia) or `atiumd*.dll` (AMD). As the name suggests, this is user-mode code; it’s running in the same context and address space as your app (and the API runtime) and has no elevated privileges whatsoever. It implements a lower-level API (the DDI) that is called by D3D; this API is fairly similar to the one you’re seeing on the surface, but a bit more explicit about things like memory management and such.
+
+This is where most of the "magic" on the CPU side happens. If your app crashes because of some API call you did, it will usually be in here 😄. It’s called `nvd3dum.dll` (NVidia) or `atiumd*.dll` (AMD). As the name suggests, this is user-mode code; it’s running in the same context and address space as your app (and the API runtime) and has no elevated privileges whatsoever. It implements a lower-level API (the DDI) that is called by D3D; this API is fairly similar to the one you’re seeing on the surface, but a bit more explicit about things like memory management and such.
 
 This module is where things like shader compilation happen. D3D passes a pre-validated shader token stream to the UMD – i.e. it’s already checked that the code is valid in the sense of being syntactically correct and obeying D3D constraints (using the right types, not using more textures/samplers than available, not exceeding the number of available constant buffers, stuff like that). This is compiled from HLSL code and usually has quite a number of high-level optimizations (various loop optimizations, dead-code elimination, constant propagation, predicating ifs etc.) applied to it - this is good news since it means the driver benefits from all these relatively costly optimizations that have been performed at compile time. However, it also has a bunch of lower-level optimizations (such as register allocation and loop unrolling) applied that drivers would rather do themselves; long story short, this usually just gets immediately turned into a intermediate representation (IR) and then compiled some more; shader hardware is close enough to D3D bytecode that compilation doesn’t need to work wonders to give good results (and the HLSL compiler having done some of the high-yield and high-cost optimizations already definitely helps), but there’s still lots of low-level details (such as HW resource limits and scheduling constraints) that D3D neither knows nor cares about, so this is not a trivial process.
 
@@ -44,9 +47,10 @@ You’ll often find console programmers complaining about the fairly high-level,
 Anyway, on with the pipeline. Next stop: Kernel mode!
 
 ## The kernel-mode driver (KMD)
+
 This is the part that actually deals with the hardware. There may be multiple UMD instances running at any one time, but there’s only ever one KMD, and if that crashes, then boom you’re dead – used to be “blue screen” dead, but by now Windows actually knows how to kill a crashed driver and reload it (progress!). As long as it happens to be just a crash and not some kernel memory corruption at least – if that happens, all bets are off.
 
-The KMD deals with all the things that are just there once. There's only one GPU memory, even though there’s multiple apps fighting over it. Someone needs to call the shots and actually allocate (and map) physical memory. Similarly, someone must initialize the GPU at startup, set display modes (and get mode information from displays), manage the hardware mouse cursor (yes, there’s HW handling for this, and yes, you really only get one! :), program the HW watchdog timer so the GPU gets reset if it stays unresponsive for a certain time, respond to interrupts, and so on. This is what the KMD does.
+The KMD deals with all the things that are just there once. There's only one GPU memory, even though there’s multiple apps fighting over it. Someone needs to call the shots and actually allocate (and map) physical memory. Similarly, someone must initialize the GPU at startup, set display modes (and get mode information from displays), manage the hardware mouse cursor (yes, there’s HW handling for this, and yes, you really only get one! 😄, program the HW watchdog timer so the GPU gets reset if it stays unresponsive for a certain time, respond to interrupts, and so on. This is what the KMD does.
 
 There's also this whole content protection/DRM bit about setting up a protected/DRM'ed path between a video player and the GPU so no the actual precious decoded video pixels aren’t visible to any dirty user-mode code that might do awful forbidden things like dump them to disk (...whatever). The KMD has some involvement in that too.
 
@@ -55,13 +59,17 @@ Most importantly for us, the KMD manages the actual command buffer. You know, th
 But this is still just a buffer in memory right now. Its position is known to the graphics card – there’s usually a read pointer, which is where the GPU is in the main command buffer, and a write pointer, which is how far the KMD has written the buffer yet (or more precisely, how far it has told the GPU it has written yet). These are hardware registers, and they are memory-mapped – the KMD updates them periodically (usually whenever it submits a new chunk of work)…
 
 ## The Bus
+
 …but of course that write doesn’t go directly to the graphics card (at least unless it’s integrated on the CPU die!), since it needs to go through the bus first – usually PCI Express these days. DMA transfers etc. take the same route. This doesn't take very long, but it’s yet another stage in our journey. Until finally…
 
-The command processor!
-This is the frontend of the GPU – the part that actually reads the commands the KMD writes. I’ll continue from here in the next installment, since this post is long enough already :)
+## The Command Processor
 
-### Small aside: OpenGL
+This is the frontend of the GPU – the part that actually reads the commands the KMD writes. I’ll continue from here in the next installment, since this post is long enough already. 😄
+
+## Small Aside: OpenGL
+
 OpenGL is fairly similar to what I just described, except there’s not as sharp a distinction between the API and UMD layer. And unlike D3D, the (GLSL) shader compilation is not handled by the API at all, it’s all done by the driver. An unfortunate side effect is that there are as many GLSL frontends as there are 3D hardware vendors, all of them basically implementing the same spec, but with their own bugs and idiosyncrasies. Not fun. And it also means that the drivers have to do all the optimizations themselves whenever they get to see the shaders – including expensive optimizations. The D3D bytecode format is really a cleaner solution for this problem – there’s only one compiler (so no slightly incompatible dialects between different vendors!) and it allows for some costlier data-flow analysis than you would normally do.
 
-### Omissions and simplifcations
+## Omissions And Simplifications
+
 This is just an overview; there’s tons of subtleties that I glossed over. For example, there’s not just one scheduler, there's multiple implementations (the driver can choose); there’s the whole issue of how synchronization between CPU and GPU is handled that I didn’t explain at all so far. And so on. And I might have forgotten something important – if so, please tell me and I’ll fix it! But now, bye and hopefully see you next time.

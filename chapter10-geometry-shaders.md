@@ -3,7 +3,7 @@
 
 Welcome back. Last time, we dove into bottom end of the pixel pipeline. This time, we’ll switch back to the middle of the pipeline to look at what is probably the most visible addition that came with D3D10: Geometry Shaders. But first, some more words on how I decompose the graphics pipeline in this series, and how that’s different from the view the APIs will present to you.
 
-### There’s multiple pipelines / anatomy of a pipeline stage
+## There’s Multiple Pipelines / Anatomy Of A Pipeline Stage
 
 This goes back to [part 3](https://fgiesen.wordpress.com/2011/07/03/a-trip-through-the-graphics-pipeline-2011-part-3/), but it’s important enough to repeat it: if you look in, for example, the D3D10 documentation, you’ll find a diagram of the “D3D10 pipeline” that includes all stages that might be active. The “D3D10 pipeline” includes Geometry Shading, even if you don’t have a Geometry shader set, and the same for Stream-Out. In the purely functional model of D3D10, the Geometry Shading stage is always there; if you don’t set a Geometry Shader, it just happens to be very simple (and boring): data is just passed through unmodified to the next pipeline stage(s) (Rasterization/Stream-Out).
 
@@ -13,7 +13,7 @@ In fact, this is how it _always_ looks when we want to get something done by the
 
 We’ve seen shader units (and shader execution) and we’ve seen dispatch; and in fact, now that we’ve seen Pixel Shaders (which have some peculiarities like derivative computation, helper pixels, discard and attribute interpolation), we’re not gonna see any big additions to shader unit functionality until we get to Compute Shaders, with their specialized buffer types and atomics. So for the next few parts, I won’t be talking about the shader units; what’s really different about the various shader types is the shape and interpretation of data that goes in and comes out. The shader parts that don’t deal with IO (arithmetic, texture sampling) stay the same, so I won’t be talking about them.
 
-### The Shape of Tris to Shade
+## The Shape of Tris to Shade
 
 So let’s have a look at how our IO buffers for Geometry Shaders look. Let’s start with input. Well, that’s reasonably easy – it’s just what we wrote from the Vertex Shader! Or well, not quite; the Geometry Shader looks at primitives, not individual vertices, so what we really need is the output from Primitive Assembly (PA). Note that there’s multiple ways to deal with this; PA could expand primitives out (duplicating vertices if they’re referenced multiple times), or it could just hand us one block of vertices (I’ll stick with the 32 vertices I used earlier) with an associated small “index buffer” (since we’re indexing into a block of 32 vertices, we just need 5 bits per index). Either way works fine; the former is the natural input format for the clip/cull I discussed after PA, but the latter needs far less buffer space when running GS, so I’ll use that model here.
 
@@ -27,7 +27,7 @@ So this is our first snag: with VS, we could basically pick our target batch siz
 
 At this stage, you can basically pick how many input blocks you’re willing to merge to get one block of primitives to geometry shade; that number is going to be low because of the memory requirements (I’d be very surprised to see more than 4), and depending on how important you judge GS to be, you might even pick 1, i.e. don’t merge across input blocks at all and live with crappy utilization on GS shading blocks/Warps/Wavefronts! That’s not great with triangles and really bad with the primitives that have even more vertices, but not much of an issue when your main use case for GS in practice is expanding points to quads (point sprites) and maybe rendering the occasional cube shadow map (using the Viewport Array Index/Rendertarget Index – I’ll get to that in a bit).
 
-### GS output: no rose garden over here, either
+## GS Output: No Rose Garden Over Here, Either
 
 So how’s it looking on the output side? Again, this is more complicated than the plain VS data flow. Much more complicated in fact; while a VS only outputs one thing (shaded vertices) with a 1:1 correspondence between unshaded and shaded vertices, a GS outputs a variable number of vertices (up to a maximum that’s specified at compile time), and as of D3D11 it can also have multiple output streams – however, a maximum of one stream can be sent on down the rest of the pipeline, which is the path I’m talking about now. The other destination for GS data (Stream-Out) will be covered in the next part.
 
@@ -37,19 +37,19 @@ Also note that the GS inputs _primitives_ (e.g. points, lines, triangles or patc
 
 The answer boils down to two words: Primitive Assembly. This is what we’re doing here – taking a number of vertices and assembling them into a full primitive to send down the pipeline. But we already use that functional block in this data path, just in front of the GS. So for GS, we need a second primitive assembly stage, which we’d like to keep simple, and assembling triangle strips is very simple indeed: a triangle is always 3 vertices from the output buffer in sequential order, with only a bit of glue logic to keep track of the current winding order. In other words, strips are not significantly more complex to support than what is arguably the simplest primitive of all (non-indexed lines/triangles), but they still save output buffer space (and hence give us more potential for parallelism) for typical primitives like quads.
 
-### API order again
+## API Order Again
 
 There’s a few problems here, however: in the regular vertex shading path, we know exactly how many primitives there are in a batch and where they are, even before the shaded vertices arrive at the PA buffer – all this is fixed from the point where we set up the batches to shade. If we, for example, have multiple units for cull/clip/triangle setup, they can all start in parallel; they know where to get their vertex data from, and they can know ahead of time which “sequence number” their triangle will have so it can all be put into order.
 
 For GS, we don’t generally know how many primitives we’re gonna generate before we get the outputs back – in fact, we might not have produced any! But we still need to respect API order: it’s first all primitives generated from GS invocation 0, then all primitives from invocation 1, and so on, through to the end of the batch (and of course the batches need to be processed in order too, same as with VS). So for GS, once we get results back, we first need to scan over the output data to determine the locations where complete primitives start. Only then can we start doing cull, clip and triangle setup (potentially in parallel). More extra work!
 
-### VPAI and RTAI
+## VPAI and RTAI
 
 These are two features added with GS that don’t actually affect Geometry Shader execution, but do have some effect on the processing further downstream, so I thought I’d mention them here: The Viewport Array Index (here, VPAI for short) and Render-target Array Index (RTAI). RTAI first, since it’s a bit easier to explain: as you hopefully know, D3D10 adds support for texture arrays. Well, the RTAI gives you render-to-texture-array support: you set a texture array as render target, and then in the GS you can select per-primitive to which array index the primitive should go. Note that because the GS is writing vertices not primitives, we need to pick a single vertex that selects the RTAI (and also VPAI) per primitive; this is always the “leading vertex”, i.e. the first specified vertex that belongs to a primitive. One example use case for RTAI is rendering cubemaps in one pass: the GS decides per primitive to which of the cube faces it should be sent (potentially several of them). VPAI is an orthogonal feature which allows you to set multiple viewports and scissor rects (up to 15), and then decide per primitive which viewport to use. This can be used to render multiple cascades in a Cascaded Shadow Map in a single pass, for example, and it can also be combined with RTAI.
 
 As said, both features don’t affect GS processing significantly – they’re just extra data that gets tacked onto the primitive and then used later: the VPAI gets consumed during the viewport transform, while the RTAI makes it all the way down to the pixel pipeline.
 
-### Summary so far
+## Summary so Far
 
 Okay, so there’s some amount of trouble on the input end – we don’t fully get to pick our input data format, so we need extra buffering on the input data, and even then we have a variable amount of input primitives which we’re not necessarily going to be able to partition into nice big batches. And on the output end, we’re again assembling a variable number of primitives, don’t necessarily know which GS will produce how many primitives in advance (though for some GSs we’ll be able to determine this statically from the compiled code, for example because all vertex emits are outside of flow control or inside loops with a known iteration count and no early-outs), and have to spend some time parsing the output before we can send it on to triangle setup.
 
@@ -57,7 +57,7 @@ If that sounds more involved than what we had in the VS-only case, that’s beca
 
 And it doesn’t help that GSs produce primitives as strips, sequentially; for a Vertex Shader, we get one invocation per vertex, which reads one vertex and writes one vertex (nice). For a GS, though, we might end up having only a batch of 11 GSs running (because there wasn’t enough primitives in the input buffer), with each of them running fairly long and producing something like 8 output vertices. That’s a long time to be running at low utilization! (Remember we need somewhere between 16 and 64 independent jobs per batch we dispatch to the shader units). It’s even more annoying if the GS mainly consists of a loop – for example, in the “render to cube map” case I mentioned for RTAI, we loop over the 6 faces in a cube, check if a triangle is visible on that face, and output a triangle if that’s the case. The computations for the 6 faces are really independent; if possible, we’d like to run them in parallel!
 
-### Bonus: GS Instancing
+## Bonus: GS Instancing
 
 Well, enter GS Instancing, another feature new in D3D11 – poorly documented, sadly (and I’m not sure if there’s any good examples for it in the SDK). It’s fairly simple to explain, though: for each input primitive, the GS gets run not just once but multiple times (this is a static count selected at compile time). It’s basically equivalent to wrapping the whole shader in a
 

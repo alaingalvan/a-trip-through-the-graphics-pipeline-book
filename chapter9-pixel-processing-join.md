@@ -2,22 +2,22 @@
 
 Welcome back! This post deals with the second half of pixel processing, the “join phase”. The previous phase was all about taking a small number of input streams and turning them into lots of independent tasks for the shader units. Now we need to fold that large number of independent computations back into one (correctly ordered) stream of memory operations. As I already did in the posts on rasterization and early Z, I’ll first give a quick description of what needs to be done on a general level, and then I’ll go into how this is mapped to hardware.
 
-### Merging pixels again: blend and late Z
+## Merging pixels again: blend and late Z
 
 At the bottom of the pipeline (in what D3D calls the “Output Merger” stage), we have late Z/stencil processing and blending. These two operations are both relatively simple computationally, and they both update the render target(s) / depth buffer respectively. “Update” operation here means they’re of the read-modify-write variety. Because all of this happens for every quad that makes it this far through the pipeline, it’s also bandwidth-intensive. Finally, it’s order-sensitive (both blending and Z processing need to happen in API order), so we need to make sure to sort processed quads into order first.
 
 I’ve already explained Z-processing, and blending is one of these things that work pretty much as you’d expect; it’s a fixed-function block that performs a multiply, a multiply-add and maybe some subtractions first, per render target. This block is kept deliberately simple; it’s separate from the shader units so it needs its own ALU, and we’d really prefer for it to be as small as possible: we want to spend our chip area (and power budget) on ALUs in the shader units, where they benefit every code that runs on the GPU, not on a fixed-function unit that’s only used at the end of the pixel pipeline. Also, we need it to have a short, predictable latency: this part of the pipeline needs to process data in-order to be correct. This limits our options as far as trading throughput for latency is concerned; we can still process quads that don’t overlap in parallel, but if we e.g. draw lots of small triangles, we’ll have multiple quads coming in for every screen location, and we’d better be able to write them out as quickly as they come, or else all our massively parallel pixel processing was for nought.
 
-### Meet the ROPs
+## Meet the ROPs
 
 ROPs are the hardware units that handle this part of the pipeline (as you can tell by the plural, there’s more than one). The acronym, depending on who you asks, stands for “Render OutPut unit”, “Raster Operations Pipeline”, or “Raster Operations Processor”. The actual name is fairly archaic – it derives from the days of pure 2D hardware acceleration, with hardware whose main purpose was to do fast [Bit blits](http://en.wikipedia.org/wiki/Bit_blit). The classic 2D ROP design has three inputs – the current (destination) pixel value in the frame buffer, the source data, and a mask input – then computes some function of the 3 values and writes the results back to the frame buffer. Note this is before true color displays: the image data was usually in bit plane format and the function was some binary logic function. Then at some point bit planes died out (in favor of “chunky” representations that keep the bits for a pixel together), true color became the norm, the on-off mask was replaced with an alpha channel and the bitwise operations with blends, but the name stuck. So even now in 2011, when about the last remnant of that original architecture is the “logic op” in OpenGL, we still call them ROPs.
 
 So what do we need to do, in hardware, for blend/late Z? A simple plan:
 
-1.  Read original render target/depth buffer contents from memory – memory access, long latency. Might also involve depth buffer and render target decompression! (I’ll explain render target compression later)
-2.  Sort incoming shaded quads into the right (API) order. This takes some buffering so we don’t immediately stall when quads don’t finish in the right order (think loops/branches, discard, and variable texture fetch latency). Note we only need to sort based on primitive ID here – two quads from the same primitive can never overlap, and if they don’t overlap they don’t need to be sorted!
-3.  Perform the actual blend/late Z/stencil operation. This is math – maybe a few dozen cycles worth, even with deeply pipelined units.
-4.  Write the results back to memory again, compressing etc. along the way – long latency again, though this time we’re not waiting for results so it’s less of a problem at this end.
+1. Read original render target/depth buffer contents from memory – memory access, long latency. Might also involve depth buffer and render target decompression! (I’ll explain render target compression later)
+2. Sort incoming shaded quads into the right (API) order. This takes some buffering so we don’t immediately stall when quads don’t finish in the right order (think loops/branches, discard, and variable texture fetch latency). Note we only need to sort based on primitive ID here – two quads from the same primitive can never overlap, and if they don’t overlap they don’t need to be sorted!
+3. Perform the actual blend/late Z/stencil operation. This is math – maybe a few dozen cycles worth, even with deeply pipelined units.
+4. Write the results back to memory again, compressing etc. along the way – long latency again, though this time we’re not waiting for results so it’s less of a problem at this end.
 
 So, build the late-Z/blending unit, add some compression logic, wire it up to memory on one side and do some buffering of shaded quads on the other side and we’re done, right?
 
@@ -25,7 +25,7 @@ Well, in theory anyway.
 
 Except we need to cover the long latencies somehow. And all this happens for _every single pixel_ (well, quad, actually). So we need to worry about memory bandwidth too… memory bandwidth? Wasn’t there something about memory bandwidth? Watch closely now as I pull a bunny out of a hat after I put it there way back in [part 2](https://fgiesen.wordpress.com/2011/07/02/a-trip-through-the-graphics-pipeline-2011-part-2/) (uh oh, that was more than a week ago – hope that critter is still OK in there…).
 
-### Memory bandwidth redux: DRAM pages
+## Memory bandwidth redux: DRAM pages
 
 In part 2, I described the 2D layout of DRAM, and how it’s faster to stay within a single row because changing the active row takes time – so for ideal bandwidth you want to stay in the same row between accesses. Well, the thing is, single DRAM rows are kinda large. Individual DRAM chips go up into the Gigabit range in size these days, and while they’re not necessarily square (in fact a 2:1 aspect ratio seems to be preferred), you can still do a rough calculation of how many rows and columns there would be; for 512 Megabit (=64MB), we’d expect something like 16384×32768, i.e. a single row is about 32k bits or 4k bytes (or maybe 2k, or 8k, but somewhere in that ballpark – you get the idea). That’s a rather inconvenient size to be making memory transactions in.
 
@@ -39,7 +39,7 @@ An of course, if we have these buffers in the ROPs anyway, we might as well trea
 
 Okay, that explains the memory side of things, and the computational part we’ve already covered. Next up: Compression!
 
-### Depth buffer and color buffer compression
+## Depth buffer and color buffer compression
 
 I already explained the basic workings of this in [part 7](https://fgiesen.wordpress.com/2011/07/08/a-trip-through-the-graphics-pipeline-2011-part-7/) while talking about Z; in fact, I don’t have much to add about depth buffer compression here. But all the bandwidth issues I mentioned there exist for color values too; it’s not so bad for regular rendering (unless the Pixel Shaders output pixels fast enough to hit memory bandwidth limits), but it is a serious issue for MSAA, where we suddenly store somewhere between 2 and 8 samples per pixel. Like Z, we want some lossless compression scheme to save bandwidth in common cases. Unlike Z, plane equations per tile are not a good fit to textured pixel data.
 
@@ -53,10 +53,10 @@ And that’s it for our first rendering data path: just Vertex and Pixel Shaders
 
 _Everyone_ who writes rendering code wonders about this at some point – the regular blend pipeline a serious pain to work with sometimes. So why can’t we get fully programmable blend? We have fully programmable shading, after all! Well, we now have the necessary framework to look into this properly. There’s two main proposals for this that I’ve seen – let’s look at the both in turn:
 
-1.  Blend in Pixel Shader – i.e. Pixel Shader reads framebuffer, computes blend equation, writes new output value.
-2.  Programmable Blend Unit – “Blend Shaders”, with subset of full shader instruction set if necessary. Happen in separate stage after PS.
+1. Blend in Pixel Shader – i.e. Pixel Shader reads framebuffer, computes blend equation, writes new output value.
+2. Programmable Blend Unit – “Blend Shaders”, with subset of full shader instruction set if necessary. Happen in separate stage after PS.
 
-### 1\. Blend in Pixel Shader
+## 1. Blend in Pixel Shader
 
 This seems like a no-brainer: after all, we have loads and texture samples in shaders already, right? So why not just allow a read to the current render target? Turns out that unconstrained reads are a _really_ bad idea, because it means that every pixel being shaded could (potentially) influence every other pixel being shaded. So what if I reference a pixel in the quad over to the left? Well, a shader for that quad could be running this instant. Or I could be sampling half of my current quad and half of another quads that’s currently active – what do I do now? What exactly would be the correct results in that regard, never mind that we’d probably have to shade all quads sequentially to reliably get them? No, that’s a can of worms. Unconstrained reads from the frame buffer in Pixel Shaders are out. But what if we get a special render target read instruction that samples one of the active render targets at the current location? Now, that’s a lot better – now we only need to worry about writes to the location of the current quad, which is a way more tractable problem.
 
@@ -66,7 +66,7 @@ Okay, so this whole tracking thing is a problem. What if we just force shading t
 
 Okay, time to face the music: Pixel Shader blend in the architecture I’ve described comes with a bunch of seriously tricky problems. So what about the second approach?
 
-### 2\. “Blend Shaders”
+## 2. “Blend Shaders”
 
 I’ll say it right now: This can be made to work, _but…_
 

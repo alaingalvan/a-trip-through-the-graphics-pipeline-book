@@ -6,7 +6,7 @@ Unlike Geometry Shaders, which are conceptually quite easy (it’s just a shader
 
 To describe how hardware tessellation works, it’s probably easiest to start in the middle – with the actual primitive tessellation step, and the various requirements that apply to it. I’ll get to the new shader types (Hull Shaders and Domain Shaders in D3D11 parlance, Tessellation Control Shader and Tessellation Evaluation Shader in OpenGL 4.0 lingo) later.
 
-### Tessellation – not quite like you’d expect
+## Tessellation – not quite like you’d expect
 
 Tessellation as implemented by Shader 5.x class HW is of the “patch-based” variety. Patch types in the CG literature are mostly named by what kind of function is used to construct the tessellated points from the control points (B-spline patches, Bézier triangles, etc.). But we’ll ignore that part for now, since it’s handled in the new shader types. The actual fixed-function tessellation unit deals only with the _topology_ of the output mesh (i.e. how many vertices there are and how they’re connected to each other); and it turns out that from this perspective, there’s basically only two different types of patches: quad-based patches, which are defined on a parameter domain with two orthogonal coordinate axes (which I’ll call u and v here, both are in [0,1]) and usually constructed as a tensor product of two one-parameter basis functions, and triangle-based patches, which use a redundant representation with three coordinates (u, v, w) based on barycentric coordinates (i.e. $$u,v,w \geq 0, u + v + w = 1$$ ). In D3D11 parlance, these are the “quad” and “tri” domains, respectively. There’s also an “isoline” domain which instead of a 2D surface produces one or multiple 1D curves; I’ll treat it the same way as I did lines and point primitives throughout this series: I acknowledge its existence but won’t go into further detail.
 
@@ -25,7 +25,7 @@ Here’s the _actual_ meshes that the tessellator will produce for the given inp
 
 For quads, this is (roughly) what we’re expecting – except for some flipped diagonals, which I’ll get to in a minute. But the triangle is a completely different beast. It’s got a very different topology from the “natural” tessellation I showed above, including a different number of vertices (12 instead of 10). Clearly, there’s something funny going on here – and that something happens to be related to the way transitions between different tessellation levels are handled.
 
-### Making ends meet
+## Making Ends Meet
 
 The elephant in the room is handling transitions between patches. Tessellating a single triangle (or quad) is easy, but we want to be able to determine tessellation factors per-patch, because we only want to spend triangles where we need them – and not waste tons of triangles on some distant (and possibly backface-culled) parts of the mesh. Additionally, we want to be able to do this quickly and ideally without extra memory usage; that means a global fix-up post-pass or something of that caliber is out of the question.
 
@@ -43,7 +43,7 @@ As for the inside TFs, quads are fairly easy: The quad above has an inside TF of
 
 Finally, when triangulating quads, the diagonal is generally chosen to point away from the center of the patch (in the domain coordinate space), with a consistent tie-breaking rule. This is simply to ensure maximum rotational symmetry of the resulting meshes – if there’s extra degrees of freedom, might as well use them!
 
-### Fractional tessellation factors and overall pipeline flow
+## Fractional Tessellation Factors and Overall Pipeline Flow
 
 So far, I’ve only talked about integer TFs. In two of the so-called “partitioning types”, namely “Integer” and “Pow2”, that’s all the Tessellator sees. If the shader generates a non-integer (or, respectively, non-power-of-2) TF, it will simply get rounded up to the next acceptable value. More interesting are the remaining two partitioning types: Fractional-odd and Fractional-even tessellation. Instead of jumping from tessellation factor to tessellation factor (which would cause visible pops), new vertices start out at the same position as an existing vertex in the mesh and then gradually move to their new positions as the TF increases.
 
@@ -55,7 +55,7 @@ Now, with the basic function of the fixed-function tessellator unit explained, l
 
 So let’s look a bit into the HS stage.
 
-### Hull Shader execution
+## Hull Shader Execution
 
 Like [Geometry Shaders](https://fgiesen.wordpress.com/2011/07/20/a-trip-through-the-graphics-pipeline-2011-part-10/), Hull Shaders work on full (patch) primitives as input – with all the input buffering headaches that causes. How much of a headache entirely depends on the type of input patch. If the patch type is something like a cubic Bézier patch, we need 4×4 = 16 input points _per patch_ and might just produce a single quad of output (or even none at all, if the patch is culled); clearly, that’s a somewhat awkward amount of data to work with, and doesn’t lend itself to very efficient shading. On the other hand, if tessellation takes plain triangles as input (which a lot of people do), input buffering is pretty tame and not likely to be a source of problems or bottlenecks.
 
@@ -67,7 +67,7 @@ Finally, Hull Shaders are somewhat special in the way they are compiled in D3D11
 
 Anyway, Hull Shaders produce a bunch of output per patch; most of it is just kept around until the corresponding Domain Shaders run, except for the TFs, which get sent to the tessellator unit. If any of the TFs are less than or equal to zero (or NaN), the patch is culled, and the corresponding control points and patch constants silently get thrown away. Otherwise, the Tessellator (which implements the functionality described above) kicks in, reads the just-shaded patches, and starts churning out domain point positions and triangle indices, and we need to get ready for DS execution.
 
-### Domain Shaders
+## Domain Shaders
 
 Just like for [Vertex Shading](https://fgiesen.wordpress.com/2011/07/03/a-trip-through-the-graphics-pipeline-2011-part-3/) way back, we want to gather multiple domain vertices into one batch that we shade together and then pass on the PA. The fixed-function tessellator can take care of this: “just” handle it along with producing vertex positions and indices (I put the “just” in quotes here because this does involve some amount of bookkeeping).
 
@@ -77,7 +77,7 @@ In short, once we get to the DS, life is good; the data flow is almost as simple
 
 And that’s it for this post – next up: Compute Shaders, aka the final part in my original outline for this series! Until then.
 
-### Final remarks
+## Final remarks
 
 As usual, I cut a few corners. There’s the “isoline” patch type, which I didn’t go into at all (if there’s any demand for this, I can write it up). The Tessellator has all kinds of symmetry and precision requirements; as far as vertex domain positions are concerned, you can basically expect bit-exact results between the different HW vendors, because the D3D11 spec really nails this bit down. What’s intentionally not nailed down is the order in which vertices or triangles are produced – an implementation can do what it wants there, provided it does so consistently (i.e. the same input has to produce the same output, always). There’s a bunch of subtle constraints that go into this too – for example, all domain positions written by the Tessellator need to have both u and 1-u (and also v and 1-v) exactly representable as float; there’s a bunch of necessary conditions like this so that Domain Shaders can then produce watertight meshes (this rule in particular is important so that a shared edge AB between two patches, which is AB to one patch and BA to the other, can get tessellated the same way for both patches).
 
