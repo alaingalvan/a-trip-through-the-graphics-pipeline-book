@@ -14,4 +14,3 @@
 * [Stream-Out](chapter11-stream-out.md)
 * [Tessellation](chapter12-tessellation.md)
 * [Compute Shaders](chapter13-compute-shaders.md)
-
