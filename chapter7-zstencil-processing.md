@@ -2,9 +2,9 @@
 
 In this installment, I’ll be talking about the (early) Z pipeline and how it interacts with rasterization. Like the last part, the text won’t proceed in actual pipeline order; again, I’ll describe the underlying algorithms first, and then fill in the pipeline stages (in reverse order, because that’s the easiest way to explain it) after the fact.
 
-### Interpolated values
+## Interpolated values
 
-Z is interpolated across the triangle, as are all the attributes output by the vertex shader. So let me take a minute to explain how that works. At this point I originally had a section on how the math behind interpolation is derived, and why perspective interpolation works the way it works. I struggled with that for hours, because I was trying to limit it to maybe one or two paragraphs (since it’s an aside), and what I can say now is that if I want to explain it properly, I need more space than that, and at least one or two pictures; a picture may say more than thousand words, but a nice diagram takes me about as long to prepare as a thousand words of text, so that’s not necessarily a win from my perspective 😄. Anyway, this is something of a tangent anyway, so I’m adding it to my pile of "graphics-related things to write up properly at some point". For now, I’m giving you the executive summary:
+Z is interpolated across the triangle, as are all the attributes output by the vertex shader. So let me take a minute to explain how that works. At this point I originally had a section on how the math behind interpolation is derived, and why perspective interpolation works the way it works. I struggled with that for hours, because I was trying to limit it to maybe one or two paragraphs (since it’s an aside), and what I can say now is that if I want to explain it properly, I need more space than that, and at least one or two pictures; a picture may say more than thousand words, but a nice diagram takes me about as long to prepare as a thousand words of text, so that’s not necessarily a win from my perspective. Anyway, this is something of a tangent anyway, so I’m adding it to my pile of "graphics-related things to write up properly at some point". For now, I’m giving you the executive summary:
 
 Just linearly interpolating attributes (colors, texture coordinates etc.) across the screen-space triangle does not produce the right results (unless the interpolation mode is one of the "no perspective" ones, in which case ignore what I just wrote). However, say we want to interpolate a 2D texture coordinate pair $$(s,t)$$. It turns out you do get the right results if you linearly interpolate $$\frac{1}{w}$$, $$\frac{s}{w}$$ and $$\frac{t}{w}$$ in screen-space (w here is the homogeneous clip-space w from the vertex position), then per-pixel take the reciprocal of $$\frac{1}{w}$$ to get w, and finally multiply the other two interpolated fractions by w to get s and t. The actual linear interpolation boils down to setting up a plane equation and then plugging the screen-space coordinates in. And if you’re writing a software perspective texture mapper, that’s the end of it. But if you’re interpolating more than two values, a better approach is to compute (using perspective interpolation) [barycentric coordinates](https://en.wikipedia.org/wiki/Barycentric_coordinate_system) – let’s call them $$\lambda_0$$ and $$\lambda_1$$ – for the current pixel in the original clip-space triangle, after which you can interpolate the actual vertex attributes using regular linear interpolation without having to multiply everything by w afterwards.
 
@@ -12,7 +12,7 @@ So how much work does that add to triangle setup? Setting up the $$\frac{\lambda
 
 Let’s get back to why we’re here: the one value we want to interpolate _right now_ is Z, and because we computed Z as $$\frac{z}{w}$$ at the vertex level as part of projection (see previous part), so it’s already divided by w and we can just interpolate it linearly in screen space. Nice. What we end up with is a plane equation for $$Z = aX + bY + c$$ that we can just plug X and Y into to get a value. So, here’s the punchline of my furious hand-waving in the last few paragraphs: Interpolating Z at any given point boils down to two multiply-adds. (Starting to see why GPUs have fast multiply-accumulate units? This stuff is absolutely everywhere!).
 
-### Early Z/Stencil
+## Early Z/Stencil
 
 Now, if you believe the place that graphics APIs traditionally put Z/Stencil processing into – right before alpha blend, way at the bottom of the pixel pipeline – you might be confused a bit. Why am I even discussing Z at the point in the pipeline where we are right now? We haven’t even started shading pixels! The answer is simple: the Z and stencil tests reject pixels. Potentially the majority of them. You really, _really_ don’t want to completely shade a detailed mesh with complicated materials, to then throw away 95% of the work you just did because that mesh happens to be mostly hidden behind a wall. That’s just a really stupid waste of bandwidth, processing power and energy. And in most cases, it’s completely unnecessary: most shaders don’t do anything that would influence the results of the Z test, or the values written back to the Z/stencil buffers.
 
@@ -22,7 +22,7 @@ So GPUs actually have two copies of the Z/stencil logic; one right after the ras
 
 Traditionally, APIs just pretended none of this early-out logic existed; Z/Stencil was in a late stage in the original API model, and any optimizations such as early-Z had to be done in a way that was 100% functionally consistent with that model; i.e. drivers had to detect when early-Z was applicable, and could only turn it on when there were no observable differences. By now APIs have closed that gap; as of DX11, shaders can be declared as "force early-Z", which means they run with full early-Z processing even when the shader uses primitives that aren’t necessarily "safe" for early-Z, and shaders that write depth can declare that the interpolated Z value is conservative (i.e. early Z reject can still happen).
 
-### Z/stencil writes: the full truth
+## Z/Stencil Writes: The Full Truth
 
 Okay, wait. As I’ve described it, we now have two parts in the pipeline – early Z and late Z – that can both write to the Z/stencil buffers. For any given shader/render state combination that we look at, this will work – in the steady state. But that’s not how it works in practice. What actually happens is that we render a few hundred to a few thousand batches per frame, switching shaders and render state regularly. Most of these shaders will allow early Z, but some won’t. Switching from a shader that does early Z to one that does late Z is no problem. But going back from late Z to early Z is, if early Z does any writes: early Z is, well, earlier in the pipeline than late Z – that’s the whole point! So we may start early-Z processing for one shader, merrily writing to the depth buffer while there’s still stuff down in the pipeline for our old shader that’s running late-Z and may be trying to write the same location at the same time – classic race condition. So how do we fix this? There’s a bunch of options:
 
@@ -35,7 +35,7 @@ All of these methods work, and all have their own advantages and drawbacks. Agai
 
 But we’re still doing all this testing per pixel. Can’t we do better?
 
-### Hierarchical Z/Stencil
+## Hierarchical Z/Stencil
 
 The idea here is that we can use our tile trick from rasterization again, and try to Z-reject whole tiles at a time, before we even descend down to the pixel level! What we do here is a strictly conservative test; it may tell us that "there might be pixels that pass the Z/stencil-test in this tile" when there are none, but it will never claim that all pixels are rejected when in fact they weren’t.
 
@@ -45,7 +45,7 @@ The same thing works (with min/max and compare directions swapped) if we’re us
 
 Similar to the hierarchical-Z logic I’ve described, current GPUs also have hierarchical stencil processing. However, unlike hierarchical-Z, I haven’t seen much in the way of published literature on the subject (meaning, I haven’t run into it – there might be papers on it, but I’m not aware of them); as a game console developer you get access to low-level GPU docs which include a description of the underlying algorithms, but frankly, I’m definitely not comfortable writing about something here where really the only good sources I have are various GPU docs that came with a thick stack of NDAs. Instead I’ll just nebulously note that there’s magic pixie dust that can do certain kinds of stencil testing very efficiently under controlled circumstances, and leave you to ponder what that might be and how it might work, in the unlikely case that you deeply care about this – presumably because your father was killed by a hierarchical stencil unit and you’re now collecting information on its weak points for your revenge, or something like that.
 
-### Putting it all together
+## Putting it all Together
 
 Okay, we now have all the algorithms and theory we need – let’s see how we can take our new set of toys and wire it up with what we already have!
 
@@ -55,17 +55,17 @@ Then there’s hierarchical Z (I’m assuming less-style comparisons here). We w
 
 And by the way, "Real-Time Rendering" mentions at this point that "it is likely that GPUs are using hierarchical Z-buffers with more than two levels". I doubt this is true, for the same reason that I doubt they use a multilevel hierarchical rasterizer: adding more levels makes the easy cases (large triangles) even faster while adding latency and useless work for small triangles: if you’re drawing a triangle that fits inside a single 8×8 tile, any coarser hierarchy level is pure overhead, because even at the 8×8 level, you’d just do one test to trivial-reject the triangle (or not). And again, for hardware, it’s not that big a performance issue; as long as you’re not consuming extra bandwidth or other scarce resources, doing more compute work than strictly necessary isn’t a big problem, as long as it’s within reasonable limits,
 
-Hierarchical stencil is also there and should also happen prior to fine rast, most likely in parallel with hierarchical Z. We’ve established that this runs on air, love and magic pixie dust, so it doesn’t need any actual hardware and is probably always exactly right in its predictions. Ahem. Moving on.
+Hierarchical stencil is also there and should also happen prior to fine rasterization, most likely in parallel with hierarchical Z. We’ve established that this runs on air, love and magic pixie dust, so it doesn’t need any actual hardware and is probably always exactly right in its predictions. Ahem. Moving on.
 
 After that is fine rasterization, followed in turn by early Z. And for early Z, there’s two more important points I need to make.
 
-### Revenge of the API order
+## Revenge of the API Order
 
 For the past few parts, I’ve been playing fast and loose with the order that primitives are submitted in. So far, it didn’t matter; not for vertex shading, nor primitive assembly, triangle setup or rasterization. But Z is different. For Z-compare modes like "less" or "lessequal", it’s very important what order the pixels arrive in; if we mess with that, we risk changing the results and introducing nondeterministic behavior. More importantly, as per the spec, we’re free to execute operations in any order _so long as it isn’t visible to the app_; well, as I just said, for Z processing, order is important, so we need to make sure that triangles arrive at Z processing in the right order (this goes for both early and late Z).
 
 What we do in cases like this is go back in the pipeline and look for a reasonable spot to sort things into order again. In our current path, the best candidate location seems to be primitive assembly; so when we start assembling primitives from shaded vertex blocks, we make sure to assemble them strictly in the original order as submitted by the app to the API. This means we might stall a bit more (if the PA buffer holds an output vertex block, but it’s not the correct one, we need to wait and can’t start setting up primitives yet), but that’s the price of correctness.
 
-### Memory bandwidth and Z compression
+## Memory Bandwidth and Z Compression
 
 The second big point is that Z/Stencil is a serious bandwidth hog. This has a couple of reasons. For one, this is the one thing we really run for all samples generated by the rasterizer (assuming Z/Stencil isn’t off, of course). Shaders, blending etc. all benefit from the early rejection we do; but even Z-rejected pixels do a Z-buffer read first (unless they were killed by hierarchical Z). That’s just how it works. The other big reason is that, when multisampling is enabled, the Z/stencil buffer is per sample; so 4x MSAA means 4x the memory bandwidth cost of Z? For something that takes a substantial amount of memory bandwidth even at no MSAA, that’s seriously bad news.
 
@@ -77,10 +77,10 @@ All of the Z-compression thing, much like texture compression in the texture sam
 
 And that’s it for today! Next up: Pixel shading and what happens around it.
 
-### Postscript
+## Postscript
 
 As I said earlier, the topic of setting up interpolated attributes would actually make for a nice article on its own. I’m skipping that for now – might decide to fill this gap later, who knows.
 
 Z processing has been in the 3D pipeline for ages, and a serious bandwidth issue for most of the time; people have thought long and hard about this problem, and there’s a zillion tricks that go into doing "production-quality" Z-buffering for GPUs, some big, some small. Again, I’m just scratching the surface here; I tried to limit myself to the bits that are useful to know for a graphics programmer. That’s why I don’t spend much time on the details of hierarchical Z computations or Z compression and the like; all of this is very specific on hardware details that change slightly in every generation, and ultimately, mostly there’s just no practical way you get to exploit any of this usefully: If a given Z-compression scheme works well for your scene, that’s some memory bandwidth you can spend on other things. If not, what are you gonna do? Change your geometry and camera position so that Z-compression is more efficient? Not very likely. To a hardware designer, these are all algorithms to be improved on in every generation, but to a programmer, they’re just facts of life to deal with.
 
-This time, I’m not going into much detail on how memory accesses work in this stage of the pipeline. That’s intentional. There’s a key to high-throughput pixel shading and other per-pixel or per-sample processing, but it’s later in the pipeline, and we’re not there yet. Everything will be revealed in due time 😄
+This time, I’m not going into much detail on how memory accesses work in this stage of the pipeline. That’s intentional. There’s a key to high-throughput pixel shading and other per-pixel or per-sample processing, but it’s later in the pipeline, and we’re not there yet. Everything will be revealed in due time.

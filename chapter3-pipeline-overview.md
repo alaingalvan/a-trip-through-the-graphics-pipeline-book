@@ -2,7 +2,7 @@
 
 At this point, we’ve sent draw calls down from our app all the way through various driver layers and the command processor; now, _finally_ we’re actually going to do some graphics processing on it! In this part, I’ll look at the vertex pipeline. But before we start…
 
-## Have some Alphabet Soup
+## Have Some Alphabet Soup
 
 We’re now in the 3D pipeline proper, which in turn consists of several stages, each of which does one particular job. I’m gonna give names to all the stages I’ll talk about – mostly sticking with the "official" D3D10/11 names for consistency – plus the corresponding acronyms. We’ll see all of these eventually on our grand tour, but it’ll take a while (and several more parts) until we see most of them – seriously, I made a small outline of the ground I want to cover, and this series will keep me busy for at least 2 weeks! Anyway, here goes, together with a one-sentence summary of what each stage does.
 

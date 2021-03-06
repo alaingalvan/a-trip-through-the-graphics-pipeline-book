@@ -2,15 +2,15 @@
 
 It’s been awhile since I posted something here, and I figured I might use this spot to explain some general points about graphics hardware and software as of 2011; you can find functional descriptions of what the graphics stack in your PC does, but usually not the "how" or "why"; I’ll try to fill in the blanks without getting too specific about any particular piece of hardware. I’m going to be mostly talking about DX11-class hardware running D3D9/10/11 on Windows, because that happens to be the (PC) stack I’m most familiar with – not that the API details etc. will matter much past this first part; once we’re actually on the GPU it’s all native commands.
 
-## The application
+## The Application
 
 This is your code. These are also your bugs. Really. Yes, the API runtime and the driver have bugs, but this is not one of them. Now go fix it already.
 
-## The API runtime
+## The API Runtime
 
 You make your resource creation / state setting / draw calls to the API. The API runtime keeps track of the current state your app has set, validates parameters and does other error and consistency checking, manages user-visible resources, may or may not validate shader code and shader linkage (or at least D3D does, in OpenGL this is handled at the driver level) maybe batches work some more, and then hands it all over to the graphics driver – more precisely, the user-mode driver.
 
-## The user-mode graphics driver (or UMD)
+## The User-Mode Graphics Driver (or UMD)
 
 This is where most of the "magic" on the CPU side happens. If your app crashes because of some API call you did, it will usually be in here 😄. It’s called `nvd3dum.dll` (NVidia) or `atiumd*.dll` (AMD). As the name suggests, this is user-mode code; it’s running in the same context and address space as your app (and the API runtime) and has no elevated privileges whatsoever. It implements a lower-level API (the DDI) that is called by D3D; this API is fairly similar to the one you’re seeing on the surface, but a bit more explicit about things like memory management and such.
 
@@ -46,7 +46,7 @@ You’ll often find console programmers complaining about the fairly high-level,
 
 Anyway, on with the pipeline. Next stop: Kernel mode!
 
-## The kernel-mode driver (KMD)
+## The Kernel-Mode Driver (KMD)
 
 This is the part that actually deals with the hardware. There may be multiple UMD instances running at any one time, but there’s only ever one KMD, and if that crashes, then boom you’re dead – used to be "blue screen" dead, but by now Windows actually knows how to kill a crashed driver and reload it (progress!). As long as it happens to be just a crash and not some kernel memory corruption at least – if that happens, all bets are off.
 

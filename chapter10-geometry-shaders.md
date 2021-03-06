@@ -1,6 +1,5 @@
 # Geometry Shaders
 
-
 Welcome back. Last time, we dove into bottom end of the pixel pipeline. This time, we’ll switch back to the middle of the pipeline to look at what is probably the most visible addition that came with D3D10: Geometry Shaders. But first, some more words on how I decompose the graphics pipeline in this series, and how that’s different from the view the APIs will present to you.
 
 ## There’s Multiple Pipelines / Anatomy Of A Pipeline Stage
