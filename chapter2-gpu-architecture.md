@@ -28,7 +28,7 @@ So, MMU. It also allows you to defragment your video memory address space withou
 
 There's also a DMA engine that can copy memory around without having to involve any of our precious 3D hardware/shader cores. Usually, this can at least copy between system memory and video memory (in both directions). It often can also copy from video memory to video memory (and if you have to do any VRAM defragmenting, this is a useful thing to have). It usually can't do system memory to system memory copies, because this is a GPU, not a memory copying unit – do your system memory copies on the CPU where they don't have to pass through PCIe in both directions!
 
-![picture](http://www.farbrausch.de/~fg/gpu/gpu_memory.jpg)
+![picture](images/gpu_memory.jpg)
 
 I've drawn a picture of this which shows some more details – by now your GPU has multiple memory controllers, each of which controls multiple memory banks, with a fat hub in the front. Whatever it takes to get that bandwidth.
 
